@@ -10,18 +10,28 @@ class RewardService {
         loadRewardRules(baseBinding)
     }
 
-    //构造 reward、condition、allOf、anyOf、grant 等核心闭包到 binding 中
-    //而这些 binding 构建的变量、上下文信息都可以传入给 DSL，让编写 DSL
-    //的人员可以利用!
+    /**
+     * 与DSL的语义进行映射
+     * @param binding
+     */
     static void loadDSL(Binding binding) {
 
+        /**
+         * spec 是冗余字段，用于给市场人员对规则分类
+         */
         binding.reward = { spec, closure ->
+            // 用于支持链式解析, 上下文委派下去, 调用reward的闭包内在持有reward的上下文
             closure.delegate = delegate
+            // 填充解析的业务逻辑，与规则定义无关
             binding.result = true
             binding.and = true
             closure()
         }
 
+        /**
+         * 满足 condition 才能发放奖励
+         * 定义了规则有 且 / 或 的关系
+         */
         binding.condition = { closure ->
             closure.delegate = delegate
             if (binding.and)
@@ -31,10 +41,10 @@ class RewardService {
         }
 
         binding.allOf = { closure ->
-            //closure.delegate = delegate
             def storeResult = binding.result
             def storeAnd = binding.and
-            binding.result = true // Starting premise is true binding.and = true
+            // 必须全满足才发放奖励，比较严格，先假设满足。用取非逻辑比较方便
+            binding.result = true
             closure()
             if (storeAnd) {
                 binding.result = (storeResult && binding.result)
@@ -48,7 +58,8 @@ class RewardService {
             closure.delegate = delegate
             def storeResult = binding.result
             def storeAnd = binding.and
-            binding.result = false // Starting premise is false binding.and = false
+            // 有一个满足就发放奖励，比较宽松，先假设不满足。用取非逻辑比较方便
+            binding.result = false
             closure()
             if (storeAnd) {
                 binding.result = (storeResult && binding.result)
@@ -58,24 +69,31 @@ class RewardService {
             binding.and = storeAnd
         }
 
+        /**
+         * 用 binding 来收集是否发放奖励的信息，借result变量来记录
+         */
         binding.grant = { closure ->
             closure.delegate = delegate
             if (binding.result)
                 closure()
         }
 
+        /**
+         * 发放奖励的一种定义，延长资源的时长
+         */
         binding.extend = { days ->
             def bbPlus = new BroadbandPlus()
             bbPlus.extend(binding.account, binding.media, days)
         }
 
+        /**
+         * 发放奖励的一种定义，增加积分
+         */
         binding.points = { points ->
             binding.account.points += points
         }
 
     }
-
-    //构建一些媒体信息和条件短语
 
     void prepareMedia(binding, media) {
         binding.media = media
@@ -85,16 +103,20 @@ class RewardService {
         binding.isSong = (media.type == "SONG")
     }
 
-    //初始化加载奖赏脚本，在这个脚本中，可以定义 onConsume 等 DSL
+    /**
+     *   初始化加载奖赏脚本，在这个脚本中，可以定义 onConsume 等 DSL
+     *
+     *   把预设的规则加进脚本中，静态确保每次都使用的是最新的规则
+     */
     static void loadRewardRules(Binding binding) {
         Binding selfBinding = new Binding()
         GroovyShell shell = new GroovyShell(selfBinding)
-        //市场人员写的 DSL 脚本就放在这个文件下，里面定义 onConsume //这些个 rewards 奖励
-        shell.evaluate(new File("./rewards.groovy")) //将外部 DSL 定义的消费、购买奖励赋值
+        //市场人员写的 DSL 脚本
+        shell.evaluate(new File("./rewards.groovy"))
+        // onConsume 是约定的方法，并不是框架支持的。目的是将市场人员的规则反馈给调用者
         binding.onConsume = selfBinding.onConsume
     }
 
-    //真正的执行方法
     void apply(account, media) {
         Binding binding = baseBinding;
         binding.account = account

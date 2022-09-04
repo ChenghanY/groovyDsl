@@ -1,9 +1,13 @@
 package com.tianhaolin.groovy.dsl
 
+/**
+ * 升级带宽
+ */
 class BroadbandPlus {
-    //后面会说.这个类是我们DSL的核心类
+
     def rewards = new RewardService()
 
+    // 确保用户账户能够消费，获取当前的资源
     def canConsume = { account, media ->
         def now = new Date()
         if (account.mediaList[media]?.after(now))
@@ -11,11 +15,15 @@ class BroadbandPlus {
         account.points > media.points
     }
 
+    // 消费，在消费的过程就要知道是否要奖励积分
     def consume = { account, media ->
         // 第一次消费才奖励
         if (account.mediaList[media.title] == null) {
             def now = new Date()
-            account.points -= media.points account.mediaList[media] = now + media.daysAccess // 应用 DSL 奖励规则 rewards.applyRewardsOnConsume(account, media)
+            account.points -= media.points
+            // 延长资源的可用时长
+            account.mediaList[media] = now + media.daysAccess
+            // 应用 DSL 奖励规则 rewards.applyRewardsOnConsume(account, media)
         }
     }
 
